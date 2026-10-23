@@ -1,0 +1,156 @@
+// Schema Jatahku — PRD §12.
+// Uang = Int (integer Rupiah). daily_target = snapshot beku (§8 #2).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")   // Neon: connection string pooled
+  directUrl = env("DIRECT_URL")     // Neon: connection string langsung (untuk migrate)
+}
+
+model User {
+  id        String   @id @default(cuid())
+  googleSub String   @unique
+  email     String
+  nama      String?
+  fotoUrl   String?
+  createdAt DateTime @default(now()) @map("dibuat_pada")
+
+  periods   JatahPeriod[]
+  routines  RoutineExpense[]
+  extras    ExtraExpense[]
+  pushes    PushSubscription[]
+  tokens    ApiToken[]
+  feedback  Feedback[]
+
+  @@map("user")
+}
+
+model JatahPeriod {
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  jatahAwal      Int       @map("jatah_awal")
+  tanggalMulai   String    @map("tanggal_mulai")   // 'YYYY-MM-DD'
+  tanggalAkhir   String    @map("tanggal_akhir")   // eksklusif
+  tzOffsetMenit  Int       @default(420) @map("tz_offset_menit") // §15 #4: offset beku per periode
+  terkunci       Boolean   @default(true) @map("jatah_awal_terkunci")
+  createdAt      DateTime  @default(now()) @map("dibuat_pada")
+  updatedAt      DateTime  @updatedAt @map("diperbarui_pada")
+
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targets DailyTarget[]
+  extras ExtraExpense[]
+
+  @@index([userId, tanggalAkhir])
+  @@map("jatah_period")
+}
+
+model RoutineExpense {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  nama           String
+  anggaranPerHari Int     @map("anggaran_per_hari")
+  urutan         Int      @default(0)
+  aktif          Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("dibuat_pada")
+  updatedAt      DateTime @updatedAt @map("diperbarui_pada")
+
+  user  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hari  RoutineExpenseDay[]
+  targets DailyTarget[]
+
+  @@map("routine_expense")
+}
+
+model RoutineExpenseDay {
+  routineExpenseId String @map("routine_expense_id")
+  hariKe           Int    @map("hari_ke") // 0=Senin .. 6=Minggu
+
+  routine RoutineExpense @relation(fields: [routineExpenseId], references: [id], onDelete: Cascade)
+
+  @@id([routineExpenseId, hariKe])
+  @@map("routine_expense_day")
+}
+
+model DailyTarget {
+  id               String   @id @default(cuid())
+  jatahPeriodId    String   @map("jatah_period_id")
+  routineExpenseId String   @map("routine_expense_id")
+  tanggal          String   // 'YYYY-MM-DD'
+  nominalRencana   Int      @map("nominal_rencana")
+  nominalAktual    Int?     @map("nominal_aktual")
+  dibayar          Boolean  @default(false)
+  dibayarPada      DateTime? @map("dibayar_pada")
+  createdAt        DateTime @default(now()) @map("dibuat_pada")
+  updatedAt        DateTime @updatedAt @map("diperbarui_pada")
+
+  period  JatahPeriod    @relation(fields: [jatahPeriodId], references: [id], onDelete: Cascade)
+  routine RoutineExpense @relation(fields: [routineExpenseId], references: [id])
+
+  @@index([jatahPeriodId, tanggal])
+  @@index([jatahPeriodId, dibayar])
+  @@map("daily_target")
+}
+
+model ExtraExpense {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  jatahPeriodId String?  @map("jatah_period_id")
+  nama          String
+  nominal       Int
+  tanggal       String   // 'YYYY-MM-DD'
+  catatan       String?
+  createdAt     DateTime @default(now()) @map("dibuat_pada")
+  updatedAt     DateTime @updatedAt @map("diperbarui_pada")
+
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  period JatahPeriod? @relation(fields: [jatahPeriodId], references: [id])
+
+  @@index([userId, tanggal])
+  @@map("extra_expense")
+}
+
+model PushSubscription {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  endpoint     String
+  p256dh       String
+  auth         String
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(now()) @map("dibuat_pada")
+  kedaluwarsa  DateTime? @map("kedaluwarsa_pada")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscription")
+}
+
+model ApiToken {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  nama          String
+  tokenHash     String   @map("token_hash")
+  cakupan       String   // mis. "read"
+  terakhirDipakai DateTime? @map("terakhir_dipakai")
+  dicabutPada   DateTime? @map("dicabut_pada")
+  createdAt     DateTime @default(now()) @map("dibuat_pada")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_token")
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  kategori  String
+  isi       String
+  createdAt DateTime @default(now()) @map("dibuat_pada")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("feedback")
+}
