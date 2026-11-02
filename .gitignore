@@ -48,3 +48,7 @@ next-env.d.ts
 # cadangan lokal, bukan bagian rilis
 /prisma/dev.db.sqlite.bak
 /prisma/migrations-sqlite.bak/
+
+.vercel
+.env*
+.env.vercel
